@@ -1,0 +1,278 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; le code de l'equipe Gonthier / Trailin
+;; préfixe : chatons
+;;
+;; mem0 et mem1 : coordonnees d'une cible
+;; mem5 : indique si le robot a ou non une cible sélectionnée
+;; mem4 : indique si un harvester est en mode retour à la base
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to chatons-ask-for-energy [ b n ]
+  ask b [ if (energy > 1000) [ give-energy myself n ]]
+end
+
+;;
+;; rentre à la base si le robot transporte plus de 800 unités de nourriture ou si son énergie est inférieure à 1000 ou si c'est un rocket-launcher qui n'a plus de missiles / fafs
+;;
+to chatons-go-back-to-base
+  ;; détermine la base la plus proche
+  let b min-one-of my-bases [ distance myself ]
+  ;; BUG CORRIGE
+  if (b != nobody) [
+    ;; si le robot est arrivé à la base
+    ifelse (distance b <= 2)
+      [ 
+        ;; dépose sa nourriture
+        give-food b carrying-food?
+        ;; demande de l'énergie s'il reste moins de 1000
+        if (energy < 1000) [ chatons-ask-for-energy b 400 ]
+        if (Breed = Explorers) [ chatons-ask-for-energy b 400 ]
+        ;; demande de l'énergie et récupère des missiles
+        if (Breed = RocketLaunchers) [
+          chatons-ask-for-energy b 800
+          if (nb-missiles < 10) [new-missile 42]
+          if (nb-fafs < 2) [new-faf 4]
+        ]
+        set mem4 0
+        ;; fait demi-tour
+        rt 180
+      ]
+    ;; sinon
+      [
+        ;; s'oriente vers la base avec un peu d'aléatoire
+        set heading towards b - 20 + random 40
+        ;; fait un demi tour si il y a du monde devant
+        ifelse (free-ahead? speed = nobody)  [ forward-move speed ][ rt random 360 if (free-ahead? 2 = nobody) [ forward-move speed ]]
+      ]
+    ]    
+end
+
+to chatons-go-and-eat
+  if ((breed = RocketLaunchers and (mem5 = 0)) or (breed = Explorers)) [
+    random-move
+  ]
+end
+
+to chatons-harvesters-go-and-eat
+  let b min-one-of perceive-food [ distance myself ]
+  ifelse (b != nobody) [ 
+    ifelse (distance b) <= 2
+      [ take b ]
+      [ set heading towards b - 20 + random 40
+      ifelse (free-ahead? speed = nobody) [ forward-move speed ][ rt random 360 if (free-ahead? 2 = nobody) [ forward-move speed ]]
+      ]
+  ]
+  [
+    ifelse (mem5 = 1)
+    [ 
+      ifelse (distancexy mem0 mem1 > 1)
+      [
+        set heading towardsxy mem0 mem1
+        ifelse (free-ahead? speed = nobody) [ forward-move speed ][ rt random 360 if (free-ahead? 2 = nobody) [ forward-move speed ]]
+      ]
+      [ set mem5 0 ]
+    ]
+    [ random-move ]
+  ]
+end
+
+;;
+;; la mémoire mem5 est à
+;; - 0 si le robot n'a pas de cible sélectionnée
+;; - 1 si le robot a une cible sélectionnée
+;;
+to-report chatons-no-target?
+  report mem5 = 0
+end
+
+to chatons-set-target-xy [ x y espece ]
+  set mem0 x set mem1 y set mem2 espece set mem5 1
+end
+
+to chatons-set-target-t [ t espece ]
+  set mem0 t set mem2 espece set mem5 2
+end
+
+to chatons-set-food-target [ x y ]
+  if (chatons-no-target?) [ set mem0 x set mem1 y set mem5 1 ] 
+end
+
+to chatons-call-rocket-launcher-xy [ x y espece ]
+  let rl min-one-of perceive-specific-robots color RocketLaunchers [ distancexy x y ]
+  if (rl != nobody) [ ask rl [ chatons-set-target-xy x y espece ]]
+end
+
+to chatons-call-rocket-launcher-t [ t espece ]
+  let rl min-one-of perceive-specific-robots color RocketLaunchers [ distance t ]
+  if (rl != nobody) [ ask rl [ chatons-set-target-t t espece ]]
+end
+
+to chatons-call-explorer [ x y espece ]
+  let ex one-of perceive-specific-robots color Explorers
+  if (ex != nobody) [
+    ask ex [ chatons-set-target-xy x y espece ]
+  ]
+end
+
+to chatons-call-harvester [ x y ]
+  let h min-one-of perceive-specific-robots color harvesters [ distancexy x y ]
+  if (h != nobody) [ ask h [ chatons-set-food-target x y ]]
+end
+
+;;
+;; essaye de sélectionner une cible à viser
+;;
+to chatons-select-target
+  ;; si le robot n'a pas une base adverse comme cible
+  if (chatons-no-target?)
+  [
+    ;; il essaye de percevoir un robot ennemi (le plus proche de lui)
+    let h min-one-of perceive-robots2 ennemy1 ennemy2 [ distance myself ]
+    ;; si il en a vu un, il mémorise ses coordonnées et vérouille la cible
+    ifelse ( h != nobody ) [
+      set mem0 h
+      set mem2 [breed] of h
+      set mem5 2
+    ]
+    ;; sinon, il se dévérouille
+    [ set mem5 0 ]
+  ]
+end
+
+to chatons-shoot 
+  if (not chatons-no-target?)
+  [
+    ifelse (mem5 = 1)
+    [ launch-rocket towardsxy mem0 mem1 set mem5 0 ]
+    [ launch-faf mem0 set mem5 0 ]
+  ]
+  
+end
+
+to chatons-drive-harvesters
+  let food one-of perceive-food
+  if (food != nobody) [
+    chatons-call-harvester [xcor] of food [ycor] of food 
+  ]
+end
+
+to goGreenExplorer
+;  ifelse (energy < 800)
+  ifelse (energy < 800)
+  [ chatons-go-back-to-base ]
+  [ chatons-go-and-eat ]
+  
+  chatons-drive-harvesters
+
+  ifelse (not chatons-no-target?) [
+    chatons-call-rocket-launcher-xy mem0 mem1 mem2
+    chatons-call-explorer mem0 mem1 mem2
+  ]
+  [ let h one-of perceive-robots2 ennemy1 ennemy2
+    if ( h != nobody ) [ chatons-call-rocket-launcher-t h [breed] of h]
+  ]
+end
+
+to goGreenRocketLauncher
+;  ifelse (carrying-food? > 1000) or (energy < 800) or ((Breed = RocketLaunchers) and ((nb-missiles < 10) or (nb-fafs < 2)))
+  ifelse (energy < 1000) or ((nb-missiles < 10) or (nb-fafs < 2))
+  [
+    ;; rentre à la base si certaines conditions sont vérifiées
+    chatons-go-back-to-base
+  ]
+  [
+    ;; sinon sélectionne une cible
+    chatons-select-target
+    ifelse (chatons-no-target?)
+    ;; si pas de cible, cherche à manger
+    [ chatons-go-and-eat ]
+    ;; sinon tire
+    [ chatons-shoot ]
+  ]
+  
+  ;; crée un nouveau faf si plus de 2000 unités d'énergie
+  if ((energy > 2000) and (nb-fafs < 5)) [ new-faf 1 ]
+end
+
+to goGreenHarvester
+  ifelse (mem4 = 1) or (carrying-food? > 500) or (energy < 500)
+  [
+    ; retour à la base
+    set mem4 1
+    ;; rentre à la base si certaines conditions sont vérifiées
+    chatons-go-back-to-base
+    if (energy > 500) and (carrying-food? > 500) [ 
+      ;; détermine la distance de la base la plus proche
+      ;; BUG CORRIGE
+      let b min-one-of my-bases [ distance myself ]
+      if (b != nobody) [
+        ;; si le robot est à moins de 15 de la base
+        if (distance b < 15)
+          [ plant-seeds color max-seeds ]
+      ]
+    ]
+  ]
+  [
+    ;; cherche à manger
+    chatons-harvesters-go-and-eat
+  ]
+end
+
+to goGreenBase
+  set label energy
+  if (nb-fafs < 20) and (energy > 4000) [ new-faf 42 ]
+  if (nb-missiles < 100) and (energy > 6000) [ new-missile 84 ]
+  if (energy > 8000) [
+    ifelse (random 9 = 0) [
+      new-Explorer 1 self
+    ]
+    ;else
+    [
+      ifelse (count Harvesters with [color = green] < 20) [
+        ifelse (random 4 != 0) [
+          new-Harvester 1 self
+        ]
+        ;else
+        [
+          new-RocketLauncher 1 self
+        ]
+      ]
+      ;else
+      [
+        ifelse (random 2 = 0) [
+          new-Harvester 1 self
+        ]
+        ;else
+        [
+          new-RocketLauncher 1 self
+        ]
+      ]
+    ]
+  ]
+  let t one-of perceive-specific-robots2 ennemy1 ennemy2 rocketlaunchers
+    if (t != nobody) [
+      ;if (random 10 = 0) [launch-rocket towards t]
+      launch-rocket towards t
+    ]
+end
+
+;; procedure pour initialiser les explorers verts
+to initGreenExplorer
+end
+
+;; procedure pour initialiser les rocket-launchers verts
+to initGreenRocketLauncher
+end
+
+;; procedure pour initialiser les harvesters verts
+to initGreenHarvester
+end
+
+;; procedure pour initialiser les bases verts
+to initGreenBase
+  ; créé des explorers, des harvesters et des rocket-launchers
+  new-Explorer 2 self
+  new-Harvester 5 self
+  new-RocketLauncher 2 self
+end
