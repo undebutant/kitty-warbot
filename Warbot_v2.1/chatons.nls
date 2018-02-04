@@ -223,33 +223,30 @@ to goGreenBase
   set label energy
   if (nb-fafs < 20) and (energy > 4000) [ new-faf 42 ]
   if (nb-missiles < 100) and (energy > 6000) [ new-missile 84 ]
-  if (energy > 8000) [
-    ifelse (random 9 = 0) [
-      new-Explorer 1 self
-    ]
-    ;else
+  ifelse (energy > 8000) [
+    
+    
+    let nbExplorer count Explorers with [color = [color] of myself]
+    let nbHarvester count Harvesters with [color = [color] of myself]
+    let nbRocketLauncher count RocketLaunchers with [color = [color] of myself]
+    let nbTotal nbExplorer + nbHarvester + nbRocketLauncher
+    
+    ifelse(8 * nbExplorer < nbTotal) ;; Au moins 1/8 d'explorers
+    [new-Explorer 1 self]
     [
-      ifelse (count Harvesters with [color = green] < 20) [
-        ifelse (random 4 != 0) [
-          new-Harvester 1 self
-        ]
-        ;else
-        [
-          new-RocketLauncher 1 self
-        ]
-      ]
-      ;else
+      ifelse(nbHarvester * 10 < nbTotal * 6) ;; Au moins 6/10 de harvesters
+      [new-Harvester 1 self]
       [
-        ifelse (random 2 = 0) [
-          new-Harvester 1 self
-        ]
-        ;else
-        [
-          new-RocketLauncher 1 self
-        ]
+        new-RocketLauncher 1 self
       ]
     ]
   ]
+  [
+    let nbHarvester count Harvesters with [color = [color] of myself]
+    if(nbHarvester < 10) ;; Au moins 10 harvesters
+    [new-Harvester 1 self]
+  ]
+  
   let t one-of perceive-specific-robots2 ennemy1 ennemy2 rocketlaunchers
     if (t != nobody) [
       ;if (random 10 = 0) [launch-rocket towards t]
