@@ -1,7 +1,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;; le code de l'equipe Gonthier / Trailin
-;; préfixe : chatons
+;; Le code de l'equipe Gonthier / Trailin
+;; Préfixe : chatons
 ;;
 ;; mem0 et mem1 : coordonnees d'une cible
 ;; mem5 : indique si le robot a ou non une cible sélectionnée
@@ -13,36 +13,37 @@ to chatons-ask-for-energy [ b n ]
 end
 
 ;;
-;; rentre à la base si le robot transporte plus de 800 unités de nourriture ou si son énergie est inférieure à 1000 ou si c'est un rocket-launcher qui n'a plus de missiles / fafs
+;; Rentre à la base si le robot transporte plus de 600 unités de nourriture, si son énergie est inférieure à 800 ou si c'est un rocket-launcher qui n'a plus de missiles / fafs
 ;;
 to chatons-go-back-to-base
-  ;; détermine la base la plus proche
+  ;; Détermine la base la plus proche
   let b min-one-of my-bases [ distance myself ]
-  ;; BUG CORRIGE
+  ;; Bug corrigé
   if (b != nobody) [
-    ;; si le robot est arrivé à la base
+    ;; Si le robot est arrivé à la base
     ifelse (distance b <= 2)
       [ 
-        ;; dépose sa nourriture
+        ;; Il dépose sa nourriture
         give-food b carrying-food?
-        ;; demande de l'énergie s'il reste moins de 1000
+        ;; Il demande de l'énergie (indiféremment du type du robot) s'il reste moins de 1000 dans ses stocks
         if (energy < 1000) [ chatons-ask-for-energy b 400 ]
+        ;; Si c'est un explorer, il gagne 400 d'énergie en plus (total de 800)
         if (Breed = Explorers) [ chatons-ask-for-energy b 400 ]
-        ;; demande de l'énergie et récupère des missiles
+        ;; Si c'est un rocket launcher, il gagne 800 d'énergie en plus (total de 1200), et récupère 42 missiles et 4 fafs selon les stocks qu'il lui reste
         if (Breed = RocketLaunchers) [
           chatons-ask-for-energy b 800
           if (nb-missiles < 10) [new-missile 42]
           if (nb-fafs < 2) [new-faf 4]
         ]
         set mem4 0
-        ;; fait demi-tour
+        ;; Fait demi-tour
         rt 180
       ]
-    ;; sinon
+    ;; Sinon
       [
-        ;; s'oriente vers la base avec un peu d'aléatoire
+        ;; S'oriente vers la base avec un peu d'aléatoire
         set heading towards b - 20 + random 40
-        ;; fait un demi tour si il y a du monde devant
+        ;; Fait un demi tour si il y a du monde devant
         ifelse (free-ahead? speed = nobody)  [ forward-move speed ][ rt random 360 if (free-ahead? 2 = nobody) [ forward-move speed ]]
       ]
     ]    
@@ -78,7 +79,7 @@ to chatons-harvesters-go-and-eat
 end
 
 ;;
-;; la mémoire mem5 est à
+;; La mémoire mem5 est à
 ;; - 0 si le robot n'a pas de cible sélectionnée
 ;; - 1 si le robot a une cible sélectionnée
 ;;
@@ -121,21 +122,21 @@ to chatons-call-harvester [ x y ]
 end
 
 ;;
-;; essaye de sélectionner une cible à viser
+;; Essaie de sélectionner une cible à viser
 ;;
 to chatons-select-target
-  ;; si le robot n'a pas une base adverse comme cible
+  ;; Si le robot n'a pas une base adverse comme cible
   if (chatons-no-target?)
   [
-    ;; il essaye de percevoir un robot ennemi (le plus proche de lui)
+    ;; Il essaie de percevoir un robot ennemi (le plus proche de lui)
     let h min-one-of perceive-robots2 ennemy1 ennemy2 [ distance myself ]
-    ;; si il en a vu un, il mémorise ses coordonnées et vérouille la cible
+    ;; S'il en a vu un, il mémorise ses coordonnées et vérouille la cible
     ifelse ( h != nobody ) [
       set mem0 h
       set mem2 [breed] of h
       set mem5 2
     ]
-    ;; sinon, il se dévérouille
+    ;; Sinon, il se déverouille
     [ set mem5 0 ]
   ]
 end
@@ -158,7 +159,6 @@ to chatons-drive-harvesters
 end
 
 to goGreenExplorer
-;  ifelse (energy < 800)
   ifelse (energy < 800)
   [ chatons-go-back-to-base ]
   [ chatons-go-and-eat ]
@@ -175,100 +175,105 @@ to goGreenExplorer
 end
 
 to goGreenRocketLauncher
-;  ifelse (carrying-food? > 1000) or (energy < 800) or ((Breed = RocketLaunchers) and ((nb-missiles < 10) or (nb-fafs < 2)))
-  ifelse (energy < 1000) or ((nb-missiles < 10) or (nb-fafs < 2))
+  ;; On prend en compte l'énergie, le nombre de missiles et le nombre de fafs restants
+  ifelse (energy < 800) or ((nb-missiles < 10) or (nb-fafs < 2))
   [
-    ;; rentre à la base si certaines conditions sont vérifiées
+    ;; Rentre à la base si ces conditions sont vérifiées
     chatons-go-back-to-base
   ]
   [
-    ;; sinon sélectionne une cible
+    ;; Sinon, sélectionne une cible
     chatons-select-target
     ifelse (chatons-no-target?)
-    ;; si pas de cible, cherche à manger
+    ;; Si pas de cible, se promène
     [ chatons-go-and-eat ]
-    ;; sinon tire
+    ;; Sinon tire
     [ chatons-shoot ]
   ]
   
-  ;; crée un nouveau faf si plus de 2000 unités d'énergie
+  ;; Créé un nouveau faf si il a plus de 2000 unités d'énergies
   if ((energy > 2000) and (nb-fafs < 5)) [ new-faf 1 ]
 end
 
 to goGreenHarvester
-  ifelse (mem4 = 1) or (carrying-food? > 500) or (energy < 500)
+  ifelse (mem4 = 1) or (carrying-food? > 600) or (energy < 800)
   [
-    ; retour à la base
+    ;; Retour à la base
     set mem4 1
-    ;; rentre à la base si certaines conditions sont vérifiées
+    ;; Rentre à la base si les conditions sont vérifiées
     chatons-go-back-to-base
-    if (energy > 500) and (carrying-food? > 500) [ 
-      ;; détermine la distance de la base la plus proche
-      ;; BUG CORRIGE
+    if (energy > 800) and (carrying-food? > 600) [ 
+      ;; Détermine la distance de la base la plus proche
+      ;; Bug corrigé
       let b min-one-of my-bases [ distance myself ]
       if (b != nobody) [
-        ;; si le robot est à moins de 15 de la base
+        ;; Si le robot est à moins de 15 unités de distance de la base
         if (distance b < 15)
           [ plant-seeds color max-seeds ]
       ]
     ]
   ]
   [
-    ;; cherche à manger
+    ;; Cherche à manger
     chatons-harvesters-go-and-eat
   ]
 end
 
 to goGreenBase
   set label energy
+  ;; Création de fafs en priorité, quand on a de l'énergie en réserve
   if (nb-fafs < 20) and (energy > 4000) [ new-faf 42 ]
+  ;; Création ensuite de missiles quand on a encore de l'énergie en réserve
   if (nb-missiles < 100) and (energy > 6000) [ new-missile 84 ]
+  ;; On créé un nouveau robot dans le cas où il nous reste encore assez d'énergie après la création d'armes
   ifelse (energy > 8000) [
-    
-    
+    ;; On refait le compte des unités nous appartenant
     let nbExplorer count Explorers with [color = [color] of myself]
     let nbHarvester count Harvesters with [color = [color] of myself]
     let nbRocketLauncher count RocketLaunchers with [color = [color] of myself]
     let nbTotal nbExplorer + nbHarvester + nbRocketLauncher
     
-    ifelse(8 * nbExplorer < nbTotal) ;; Au moins 1/8 d'explorers
+    ;; On regarde la proportion d'explorers
+    ifelse(8 * nbExplorer < nbTotal) ;; Afin d'avoir au moins 1/8 d'explorers
     [new-Explorer 1 self]
     [
-      ifelse(nbHarvester * 10 < nbTotal * 6) ;; Au moins 6/10 de harvesters
+      ;; De même pour les harvesters
+      ifelse(nbHarvester * 10 < nbTotal * 6) ;; Afin d'avoir au moins 6/10 de harvesters
       [new-Harvester 1 self]
       [
+        ;; Sinon, on fait un rocket launcher
         new-RocketLauncher 1 self
       ]
     ]
   ]
   [
+    ;; On veut cependant s'assurer un minimum de rentrée de ressources
     let nbHarvester count Harvesters with [color = [color] of myself]
-    if(nbHarvester < 10) ;; Au moins 10 harvesters
+    if(nbHarvester < 10) ;; Afin d'avoir au moins 10 harvesters
     [new-Harvester 1 self]
   ]
   
   let t one-of perceive-specific-robots2 ennemy1 ennemy2 rocketlaunchers
     if (t != nobody) [
-      ;if (random 10 = 0) [launch-rocket towards t]
       launch-rocket towards t
     ]
 end
 
-;; procedure pour initialiser les explorers verts
+;; Procédure pour initialiser les explorers verts
 to initGreenExplorer
 end
 
-;; procedure pour initialiser les rocket-launchers verts
+;; Procédure pour initialiser les rocket-launchers verts
 to initGreenRocketLauncher
 end
 
-;; procedure pour initialiser les harvesters verts
+;; Procédure pour initialiser les harvesters verts
 to initGreenHarvester
 end
 
-;; procedure pour initialiser les bases verts
+;; Procédure pour initialiser les bases verts
 to initGreenBase
-  ; créé des explorers, des harvesters et des rocket-launchers
+  ;; créé des explorers, des harvesters et des rocket-launchers
   new-Explorer 2 self
   new-Harvester 5 self
   new-RocketLauncher 2 self
